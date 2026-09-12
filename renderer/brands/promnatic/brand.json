@@ -1,0 +1,33 @@
+{
+  "appId": "za.co.promnatic.weighbridge",
+  "appName": "Promnatic Weighbridge",
+  "vendor": "Promnatic Scales",
+  "vendorShort": "Promnatic",
+  "tagline": "Why Wait. Please Weigh It",
+  "descriptor": "Weighbridge",
+  "addr": "",
+  "reg": "",
+  "vat": "",
+  "tel": "",
+  "email": "",
+  "web": "",
+  "siteCode": "promnatic",
+  "filePrefix": "Promnatic",
+  "deviceName": "Promnatic ScaleLink",
+  "boxName": "Promnatic WeighBox",
+  "ticketAccent": "#00A551",
+  "tokens": {
+    "base": "#090D0B",
+    "surface": "#111713",
+    "elev": "#19211C",
+    "accent": "#00A551",
+    "accentInk": "#4ADE80",
+    "gold": "#3FC97A"
+  },
+  "assets": {
+    "mark": "lockup",
+    "lockup": "lockup",
+    "ticketLogo": "ticket",
+    "icon": "icon"
+  }
+}

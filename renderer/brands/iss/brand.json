@@ -1,0 +1,33 @@
+{
+  "appId": "za.co.industrialscalesolutions.weighbridge",
+  "appName": "ISS Weighbridge",
+  "vendor": "Industrial Scale Solutions",
+  "vendorShort": "ISS",
+  "tagline": "Weigh Forward",
+  "descriptor": "Weighbridge Systems & Instrumentation",
+  "addr": "51 Wimbledon Street, eMalahleni",
+  "reg": "2025/316125/07",
+  "vat": "",
+  "tel": "082 709 1053",
+  "email": "info@industrialscalesolutions.co.za",
+  "web": "industrialscalesolutions.co.za",
+  "siteCode": "iss",
+  "filePrefix": "ISS",
+  "deviceName": "ISS ScaleLink",
+  "boxName": "ISS WeighBox",
+  "ticketAccent": "#1A3A6B",
+  "tokens": {
+    "base": "#0A1120",
+    "surface": "#111A2E",
+    "elev": "#1A253D",
+    "accent": "#3B82F6",
+    "accentInk": "#93C5FD",
+    "gold": "#D4AF37"
+  },
+  "assets": {
+    "mark": "mark",
+    "lockup": "lockup",
+    "ticketLogo": "ticket",
+    "icon": "icon"
+  }
+}

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Placeholder ISS mark (balance + circuit trace). Replace with mark.png from the real logo. -->
+  <g fill="none" stroke="#D4AF37" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 15V50M22.5 50H41.5M11 21H53"/>
+    <path d="M11 21L5 37M11 21L17 37M3.5 37Q11 45.5 18.5 37Z"/>
+    <path d="M53 21L47 37M53 21L59 37M45.5 37Q53 45.5 60.5 37Z"/>
+  </g>
+  <g fill="none" stroke="#D4AF37" stroke-width="1.98" stroke-linecap="round" opacity=".85">
+    <path d="M41.5 50H48V56M22.5 50H16V56"/>
+  </g>
+  <circle cx="32" cy="14" r="3" fill="#D4AF37"/><circle cx="48" cy="57.5" r="1.9" fill="#D4AF37"/><circle cx="16" cy="57.5" r="1.9" fill="#D4AF37"/>
+</svg>

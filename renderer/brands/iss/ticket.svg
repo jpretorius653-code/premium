@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 200">
+  <!-- One-ink ticket rendition (thermal safe). Replace with ticket.png — the real logo on exact white. -->
+  <g transform="translate(26 18) scale(1.9)"><g fill="none" stroke="#000" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 15V50M22.5 50H41.5M11 21H53"/>
+    <path d="M11 21L5 37M11 21L17 37M3.5 37Q11 45.5 18.5 37Z"/>
+    <path d="M53 21L47 37M53 21L59 37M45.5 37Q53 45.5 60.5 37Z"/>
+  </g>
+  <g fill="none" stroke="#000" stroke-width="2.11" stroke-linecap="round" opacity=".85">
+    <path d="M41.5 50H48V56M22.5 50H16V56"/>
+  </g>
+  <circle cx="32" cy="14" r="3" fill="#000"/><circle cx="48" cy="57.5" r="1.9" fill="#000"/><circle cx="16" cy="57.5" r="1.9" fill="#000"/></g>
+  <text x="160" y="124" font-family="Bahnschrift, 'DIN Alternate', 'Segoe UI', Arial, sans-serif" font-weight="700" font-size="112" letter-spacing="4" fill="#000">ISS</text>
+  <text x="190" y="182" text-anchor="middle" font-family="Bahnschrift, 'DIN Alternate', 'Segoe UI', Arial, sans-serif" font-weight="600" font-size="19" letter-spacing="3.2" fill="#000">INDUSTRIAL SCALE SOLUTIONS</text>
+</svg>

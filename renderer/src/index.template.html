@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
+<meta name="color-scheme" content="dark"/>
+<meta name="theme-color" content="{{THEME_COLOR}}"/>
+<!-- manifest link removed: the PWA manifest isn't used in the packaged
+     desktop build and the missing ./manifest.json triggered a "Not allowed
+     to load local resource" error that blanked the renderer. -->
+<title>{{appName}}</title>
+<style>
+<!--@styles-->
+</style>
+</head>
+<body>
+
+<!-- ACTIVATION OVERLAY -->
+<div id="ovr-act" class="fov">
+  <div class="fov-card">
+    <div class="fov-logo" id="act-logo"></div>
+    <div class="fov-title">{{appName}}</div>
+    <div class="fov-sub">Enter your installation code or licence key</div>
+    <div class="field"><label>Installation code or licence key</label>
+      <input id="act-input" type="password" inputmode="text" placeholder="••••••••"
+             autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+             onkeydown="if(event.key==='Enter')doActivate()"/>
+    </div>
+    <div id="act-fail" style="text-align:center;margin-top:8px;font-size:12px;color:#F87171;min-height:14px"></div>
+    <div id="act-machine"></div>
+    <button class="btn btn-navy btn-full" style="margin-top:6px" onclick="doActivate()">🔓 Activate</button>
+    <div style="text-align:center;margin-top:12px;font-size:11px;color:var(--text3)">Contact {{vendor}} for your activation code</div>
+  </div>
+</div>
+
+<!-- LOGIN OVERLAY -->
+<div id="ovr-login" class="fov" style="display:none">
+  <div class="fov-card">
+    <div class="fov-logo" id="login-logo"></div>
+    <div class="fov-title" id="login-title">Welcome</div>
+    <div class="fov-sub">Select your name, then enter your PIN</div>
+    <div class="user-cards" id="user-cards"></div>
+    <div id="pin-area" style="display:none">
+      <div style="font-size:11px;font-weight:800;color:var(--text3);text-align:center;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px" id="pin-user-name"></div>
+      <div class="pin-display" id="pin-dots"></div>
+      <div class="pin-pad" id="pin-pad"></div>
+      <button class="btn btn-ghost btn-full" style="margin-top:12px;font-size:12px" onclick="selectUser(null)">← Back</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" style="display:none">
+  <div id="hdr">
+    <div class="hdr-l">
+      <div id="hdr-logo-wrap"></div>
+      <div class="hdr-names">
+        <div class="hdr-co" id="hdr-co">{{vendor}}</div>
+        <div class="hdr-tag" id="hdr-tag">Weighbridge</div>
+      </div>
+    </div>
+    <div class="hdr-r">
+      <button class="cmdk-hint" onclick="cmdkOpen()" title="Search trucks, tickets, orders and screens">Search <kbd>Ctrl</kbd><kbd>K</kbd></button>
+      <div id="bridge-btns" style="display:none;gap:6px"></div>
+      <div id="conn-pill" class="conn-pill">◎ Sim</div>
+      <div class="w-hdr">
+        <span id="hdr-wt">0</span>
+        <span id="hdr-unit">kg</span>
+      </div>
+      <div id="hdr-motion" class="ns-motion nosig"><span class="ns-dot"></span><span class="ns-motion-lbl">No signal</span></div>
+      <span id="saved-badge" style="white-space:nowrap" title="Last backup">🖫 —</span>
+      <div class="hdr-user" id="hdr-user" onclick="logout()">👤 ···</div>
+    </div>
+  </div>
+  <div id="deckbar" style="display:none"></div>
+  <div id="tab-bar"></div>
+  <div id="content"></div>
+</div>
+
+<!-- WEIGHBOARD DRAWER -->
+<div id="wb" class="closed" style="display:none">
+  <div id="wb-bar" onclick="toggleWB()">
+    <div id="wb-tag"><span class="ti">⚖</span> Weighboard &nbsp;<span id="wb-count" class="badge b-blue">0 on site</span></div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span id="wb-live">0</span>
+      <span style="font-size:11px;color:var(--light)" id="wb-unit">kg</span>
+      <button style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:3px 10px;border-radius:5px;font-size:11px;font-weight:700" id="wb-btn">▲</button>
+    </div>
+  </div>
+  <div id="wb-body">
+    <button class="btn btn-navy btn-full" onclick="cap1()">📥 1st Weight</button>
+    <button class="btn btn-blue btn-full" onclick="cap2()">📤 2nd Weight</button>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div id="modal-bg" onclick="if(event.target===this)closeModal()">
+  <div id="modal-box">
+    <div class="modal-hdr"><h3 id="modal-title">Modal</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script><!--@vendor--></script>
+
+<script>
+<!--@app--></script>
+</body>
+</html>

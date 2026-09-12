@@ -1,0 +1,67 @@
+{
+  "name": "iss-weighbridge",
+  "productName": "ISS Weighbridge",
+  "version": "10.0.0",
+  "description": "ISS Weighbridge — weighbridge control, ticketing and reporting. Industrial Scale Solutions.",
+  "author": {
+    "name": "Industrial Scale Solutions",
+    "email": "info@industrialscalesolutions.co.za"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "build:renderer": "node tools/build-renderer.mjs",
+    "check": "node tools/check.mjs",
+    "start": "node tools/build-renderer.mjs && electron .",
+    "dist": "node tools/dist.mjs --brand iss",
+    "dist:promnatic": "node tools/dist.mjs --brand promnatic",
+    "licence": "node tools/iss-licence.mjs",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "serialport": "^13.0.0"
+  },
+  "devDependencies": {
+    "electron": "41.10.7",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "za.co.industrialscalesolutions.weighbridge",
+    "productName": "ISS Weighbridge",
+    "artifactName": "ISS-Weighbridge-Setup-${version}.${ext}",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "package.json",
+      "electron/**/*",
+      "renderer/index.html",
+      "build/icon.png"
+    ],
+    "asarUnpack": [
+      "**/node_modules/@serialport/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "include": "electron/installer.nsh",
+      "createDesktopShortcut": true,
+      "shortcutName": "ISS Weighbridge"
+    },
+    "publish": null
+  }
+}
