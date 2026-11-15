@@ -568,6 +568,112 @@ td b[style*="monospace"],td[style*="monospace"]{font-family:var(--f-num)!importa
   #modal-bg.open #modal-box,.cmdk{animation:none}
 }
 }
+/*@module styles/daylight.css */
+/* ══════════════════════════════════════════════════════════════════════════
+   ISS DAYLIGHT — alternative theme (v10.1)
+
+   Switched on with <html data-theme="day"> (Settings → Appearance). Loaded
+   after flagship.css and only restates what changes, so the default dark
+   theme is untouched when the attribute is absent.
+
+   Why it exists: a weighbridge cabin is a bright room with a window onto a
+   sunlit yard. A dark screen there shows the window, not the ticket. Daylight
+   puts the paperwork on white and keeps the three things that ARE the
+   instrument dark: the header, the live reading and the weighboard strip.
+   The reading therefore looks the same in both themes, and the eye finds it
+   by being the one dark panel on the page.
+   ══════════════════════════════════════════════════════════════════════════ */
+html[data-theme="day"]{
+  --base:#EDF0F4; --surface:#FFFFFF; --elev:#F3F5F8;
+  --ink:#0F1B2D; --ink-2:#44536A; --ink-3:#7A8799;
+  --accent:#1D4ED8; --accent-ink:#1E40AF; --gold:#A87F12;
+  --ok:#0B8F63; --warn:#B86E00; --bad:#D32626;
+  --ok-ink:#066B4A; --warn-ink:#8A5300; --bad-ink:#B01C1C;
+  --ok-soft:rgba(11,143,99,.10); --warn-soft:rgba(184,110,0,.11); --bad-soft:rgba(211,38,38,.09);
+  --ok-line:rgba(11,143,99,.38); --warn-line:rgba(184,110,0,.40); --bad-line:rgba(211,38,38,.38);
+  --accent-soft:rgba(29,78,216,.08); --accent-line:rgba(29,78,216,.34);
+  --line:rgba(15,27,45,.10); --line-2:rgba(15,27,45,.20);
+  --shadow:0 1px 2px rgba(15,27,45,.05),0 6px 20px rgba(15,27,45,.06);
+}
+/* The dark islands carry the flagship palette with them, legacy names
+   included — those were resolved on :root and would otherwise arrive light. */
+html[data-theme="day"] #hdr,
+html[data-theme="day"] #wb,
+html[data-theme="day"] #deckbar,
+html[data-theme="day"] .fov-card,
+html[data-theme="day"] .readout-card{
+  --base:#0A1120; --surface:#111A2E; --elev:#1A253D;
+  --ink:#F1F5F9; --ink-2:#94A3B8; --ink-3:#64748B;
+  --accent:#3B82F6; --accent-ink:#93C5FD; --gold:#D4AF37;
+  --ok:#10B981; --warn:#F59E0B; --bad:#EF4444;
+  --ok-ink:#6EE7B7; --warn-ink:#FCD34D; --bad-ink:#FCA5A5;
+  --ok-soft:rgba(16,185,129,.12); --warn-soft:rgba(245,158,11,.12); --bad-soft:rgba(239,68,68,.12);
+  --ok-line:rgba(16,185,129,.35); --warn-line:rgba(245,158,11,.38); --bad-line:rgba(239,68,68,.40);
+  --accent-soft:rgba(59,130,246,.14); --accent-line:rgba(59,130,246,.40);
+  --line:rgba(148,163,184,.12); --line-2:rgba(148,163,184,.22);
+  --navy:var(--surface); --navy2:var(--base); --blue:var(--accent); --light:var(--accent-ink);
+  --grey:var(--ink-3); --grey-d:var(--elev);
+  --bg:var(--base); --card:var(--surface); --border:var(--line); --border2:var(--line-2);
+  --text:var(--ink); --text2:var(--ink-2); --text3:var(--ink-3);
+  --green:var(--ok); --greenl:var(--ok-soft); --red:var(--bad); --redl:var(--bad-soft);
+  --amber:var(--warn); --amberl:var(--warn-soft);
+  color:var(--ink);
+}
+/* …and the light page restates the legacy names against the light palette */
+html[data-theme="day"]{
+  --navy:var(--surface); --navy2:var(--base); --blue:var(--accent); --light:var(--accent-ink);
+  --grey:var(--ink-3); --grey-d:var(--elev);
+  --bg:var(--base); --card:var(--surface); --border:var(--line); --border2:var(--line-2);
+  --text:var(--ink); --text2:var(--ink-2); --text3:var(--ink-3);
+  --green:var(--ok); --greenl:var(--ok-soft); --red:var(--bad); --redl:var(--bad-soft);
+  --amber:var(--warn); --amberl:var(--warn-soft);
+}
+@media screen{
+html[data-theme="day"],html[data-theme="day"] body{color-scheme:light}
+html[data-theme="day"] ::selection{background:rgba(29,78,216,.22)}
+html[data-theme="day"] ::-webkit-scrollbar-thumb{background:rgba(15,27,45,.22);background-clip:padding-box}
+html[data-theme="day"] ::-webkit-scrollbar-thumb:hover{background:rgba(15,27,45,.38);background-clip:padding-box}
+
+/* inputs sit on white with a firm edge — the field you type in must be findable at arm's length */
+html[data-theme="day"] input,html[data-theme="day"] select,html[data-theme="day"] textarea{
+  background:#FFFFFF!important;border-color:rgba(15,27,45,.24)}
+html[data-theme="day"] input:hover,html[data-theme="day"] select:hover,html[data-theme="day"] textarea:hover{border-color:rgba(15,27,45,.42)}
+html[data-theme="day"] input:focus,html[data-theme="day"] select:focus,html[data-theme="day"] textarea:focus{
+  border-color:var(--accent);box-shadow:0 0 0 3px rgba(29,78,216,.16)}
+html[data-theme="day"] input[readonly]{background:var(--elev)!important}
+html[data-theme="day"] .readout-card input,html[data-theme="day"] #hdr input{background:var(--base)!important;border-color:var(--line-2)}
+
+/* sign-in */
+html[data-theme="day"] .fov{background:radial-gradient(900px 520px at 50% 28%,rgba(29,78,216,.10),transparent 70%),
+  radial-gradient(700px 420px at 50% 100%,rgba(168,127,18,.10),transparent 70%),var(--base)}
+/* the sign-in card stays dark: the brand lockup is drawn for a dark ground */
+html[data-theme="day"] .fov-card{background:#111A2E;box-shadow:0 24px 70px rgba(15,27,45,.28)}
+html[data-theme="day"] .fov-card input{background:var(--base)!important;border-color:var(--line-2)}
+
+/* tab bar: white strip, the active tab underlined in blue */
+html[data-theme="day"] #tab-bar{background:var(--surface);border-bottom:1px solid var(--line-2)}
+
+/* surfaces */
+html[data-theme="day"] .card,html[data-theme="day"] .stat,html[data-theme="day"] .truck-card{box-shadow:var(--shadow)}
+html[data-theme="day"] .wsticky{box-shadow:0 -14px 18px -14px rgba(15,27,45,.18)}
+html[data-theme="day"] .toggle::after{box-shadow:0 1px 3px rgba(15,27,45,.30)}
+html[data-theme="day"] .btn-blue:hover{color:var(--accent-ink)}
+html[data-theme="day"] .lic-machine{background:var(--elev)}
+
+/* layers above the page */
+html[data-theme="day"] #modal-box{background:rgba(255,255,255,.98);box-shadow:0 40px 110px rgba(15,27,45,.28)}
+html[data-theme="day"] .modal-hdr{background:rgba(255,255,255,.98)}
+html[data-theme="day"] #toast,
+html[data-theme="day"] #toast.success,html[data-theme="day"] #toast.error,html[data-theme="day"] #toast.info{
+  background:rgba(255,255,255,.98);box-shadow:0 18px 44px rgba(15,27,45,.20)}
+html[data-theme="day"] .cmdk{background:rgba(255,255,255,.96);box-shadow:0 40px 120px rgba(15,27,45,.30)}
+
+/* the weighboard strip is glass over a dark page in flagship; over a light page it must be solid */
+html[data-theme="day"] #wb{background:#0A1120;backdrop-filter:none;-webkit-backdrop-filter:none}
+
+/* on-site cards inside the dark readout keep their dark treatment */
+html[data-theme="day"] .readout-card .truck-card{box-shadow:none}
+}
 /*@module brand-tokens (generated) */
 :root{--base:#0A1120;--surface:#111A2E;--elev:#1A253D;--accent:#3B82F6;--accent-ink:#93C5FD;--gold:#D4AF37}
 </style>
@@ -2977,7 +3083,7 @@ window.BRAND=BRAND;
 // Format is deliberate: no spaces around '=', single quotes, one line —
 // the workflow greps for it.
 // ══════════════════════════════════════════════════════════
-const RENDERER_BUILD='10.0.1';
+const RENDERER_BUILD='10.1.0';
 window.RENDERER_BUILD=RENDERER_BUILD;
 // ══════════════════════════════════════════════════════════
 // DEBUG CONSOLE — permanent, toggleable diagnostic panel.
@@ -3441,6 +3547,13 @@ const POWERED_BY='Powered by '+BRAND.vendor;
 // ── STATE ───────────────────────────────────────
 let cfg=Object.assign({},DEF_CFG,G(K.cfg,{}));
 if(!cfg.bridges)cfg.bridges=DEF_CFG.bridges;
+/* Theme. '' = flagship dark, 'day' = Daylight (styles/daylight.css). Belongs to
+   this PC — a cabin in full sun and a back office need not agree. */
+function applyTheme(){
+  try{ if(cfg.theme==='day') document.documentElement.setAttribute('data-theme','day');
+       else document.documentElement.removeAttribute('data-theme'); }catch(e){}
+}
+applyTheme();
 let users=G(K.usr,DEF_USERS);
 let db=Object.assign({},DEF_DB,G(K.db,{}));
 let txs=G(K.txs,[]);
@@ -11044,6 +11157,22 @@ function renderSettings(){ try{enforcePlan();}catch(e){} setTimeout(refreshShare
   document.getElementById('content').innerHTML=`
     <div class="sec-hd"><h2>Settings</h2><div class="sub">Master access only</div></div>
     <div class="card" style="margin-bottom:12px">
+      <div class="sg-title">Appearance</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${[['','Flagship','Dark. For control rooms and night shift.'],['day','Daylight','Light page, dark live reading. For a bright cabin.']].map(([v,n,d])=>`
+        <div onclick="setTheme('${v}')" style="flex:1;min-width:220px;cursor:pointer;border-radius:12px;padding:12px 14px;
+             border:2px solid ${(cfg.theme||'')===v?'var(--accent)':'var(--border2)'};background:${(cfg.theme||'')===v?'var(--accent-soft)':'transparent'}">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="display:inline-flex;width:44px;height:28px;border-radius:6px;overflow:hidden;border:1px solid var(--border2)">
+              <span style="flex:1;background:${v?'#EDF0F4':'#0A1120'}"></span><span style="flex:1;background:${v?'#FFFFFF':'#111A2E'}"></span><span style="flex:1;background:${v?'#0A1120':'#3B82F6'}"></span></span>
+            <b style="font-size:14px">${n}</b>${(cfg.theme||'')===v?'<span style="font-size:11px;color:var(--accent-ink);font-weight:700">· in use</span>':''}
+          </div>
+          <div style="font-size:12px;color:var(--text3);margin-top:6px">${d}</div>
+        </div>`).join('')}
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-top:8px">Applies to this PC only. Tickets and reports always print on white.</div>
+    </div>
+    <div class="card" style="margin-bottom:12px">
       <div class="sg-title">Branding / White-label</div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:10px">Active brand: <b style="color:var(--blue)">${esc((window._brand&&window._brand.company)||cfg.companyName||(ISS_CO.name+' (default)'))}</b>${window._brand?` · licensed to ${esc(window._brand.licensedTo||window._brand.company)}`:''}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -11518,6 +11647,12 @@ function setTicketStation(v){
   _ticketPushedSig=null;
   auditLog('config','settings','','Ticket station changed from "'+was+'" to "'+st+'" — next ticket '+fmtTicketNo(peekTicketSeq()));
   toast(st?('This PC now issues '+fmtTicketNo(peekTicketSeq())+' onwards'):'Station cleared — shared numbering','success',5000);
+  renderSettings();
+}
+function setTheme(v){
+  cfg.theme=(v==='day'?'day':'');
+  saveCfg(); applyTheme();
+  auditLog('config','settings','','Theme set to '+(cfg.theme==='day'?'Daylight':'Flagship'));
   renderSettings();
 }
 function setNextTicketNo(){

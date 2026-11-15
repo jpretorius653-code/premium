@@ -1,5 +1,10 @@
 # Changelog
 
+## 10.1.0 — Daylight theme
+
+- **Settings → Appearance**: choose *Flagship* (the existing dark look) or *Daylight*. Daylight puts forms, tables and reports on white for a bright weighbridge cabin and keeps the header, the live reading and the weighboard strip dark, so the reading looks the same in both themes. Per PC; nothing changes until it is chosen.
+- CSS only (`renderer/src/styles/daylight.css`) plus the picker. Tickets, reports and e-mails are unaffected.
+
 ## 10.0.1 — two PCs on one site can no longer lose a ticket
 
 Cause: MMS, November 2026. Two weighbridge PCs issued the same ticket numbers; tickets were then dropped on upload, overwritten, or weighed out twice. See `Iss-RM/docs/TICKET-LOSS-ANALYSIS.md`.

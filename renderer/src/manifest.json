@@ -1,7 +1,8 @@
 {
   "styles": [
     "styles/base.css",
-    "styles/flagship.css"
+    "styles/flagship.css",
+    "styles/daylight.css"
   ],
   "vendor": [
     "vendor/qrcode.js"

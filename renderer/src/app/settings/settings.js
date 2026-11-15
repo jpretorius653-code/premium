@@ -3,6 +3,22 @@ function renderSettings(){ try{enforcePlan();}catch(e){} setTimeout(refreshShare
   document.getElementById('content').innerHTML=`
     <div class="sec-hd"><h2>Settings</h2><div class="sub">Master access only</div></div>
     <div class="card" style="margin-bottom:12px">
+      <div class="sg-title">Appearance</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${[['','Flagship','Dark. For control rooms and night shift.'],['day','Daylight','Light page, dark live reading. For a bright cabin.']].map(([v,n,d])=>`
+        <div onclick="setTheme('${v}')" style="flex:1;min-width:220px;cursor:pointer;border-radius:12px;padding:12px 14px;
+             border:2px solid ${(cfg.theme||'')===v?'var(--accent)':'var(--border2)'};background:${(cfg.theme||'')===v?'var(--accent-soft)':'transparent'}">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="display:inline-flex;width:44px;height:28px;border-radius:6px;overflow:hidden;border:1px solid var(--border2)">
+              <span style="flex:1;background:${v?'#EDF0F4':'#0A1120'}"></span><span style="flex:1;background:${v?'#FFFFFF':'#111A2E'}"></span><span style="flex:1;background:${v?'#0A1120':'#3B82F6'}"></span></span>
+            <b style="font-size:14px">${n}</b>${(cfg.theme||'')===v?'<span style="font-size:11px;color:var(--accent-ink);font-weight:700">· in use</span>':''}
+          </div>
+          <div style="font-size:12px;color:var(--text3);margin-top:6px">${d}</div>
+        </div>`).join('')}
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-top:8px">Applies to this PC only. Tickets and reports always print on white.</div>
+    </div>
+    <div class="card" style="margin-bottom:12px">
       <div class="sg-title">Branding / White-label</div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:10px">Active brand: <b style="color:var(--blue)">${esc((window._brand&&window._brand.company)||cfg.companyName||(ISS_CO.name+' (default)'))}</b>${window._brand?` · licensed to ${esc(window._brand.licensedTo||window._brand.company)}`:''}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -477,6 +493,12 @@ function setTicketStation(v){
   _ticketPushedSig=null;
   auditLog('config','settings','','Ticket station changed from "'+was+'" to "'+st+'" — next ticket '+fmtTicketNo(peekTicketSeq()));
   toast(st?('This PC now issues '+fmtTicketNo(peekTicketSeq())+' onwards'):'Station cleared — shared numbering','success',5000);
+  renderSettings();
+}
+function setTheme(v){
+  cfg.theme=(v==='day'?'day':'');
+  saveCfg(); applyTheme();
+  auditLog('config','settings','','Theme set to '+(cfg.theme==='day'?'Daylight':'Flagship'));
   renderSettings();
 }
 function setNextTicketNo(){

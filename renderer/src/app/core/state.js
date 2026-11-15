@@ -65,6 +65,13 @@ const POWERED_BY='Powered by '+BRAND.vendor;
 // ── STATE ───────────────────────────────────────
 let cfg=Object.assign({},DEF_CFG,G(K.cfg,{}));
 if(!cfg.bridges)cfg.bridges=DEF_CFG.bridges;
+/* Theme. '' = flagship dark, 'day' = Daylight (styles/daylight.css). Belongs to
+   this PC — a cabin in full sun and a back office need not agree. */
+function applyTheme(){
+  try{ if(cfg.theme==='day') document.documentElement.setAttribute('data-theme','day');
+       else document.documentElement.removeAttribute('data-theme'); }catch(e){}
+}
+applyTheme();
 let users=G(K.usr,DEF_USERS);
 let db=Object.assign({},DEF_DB,G(K.db,{}));
 let txs=G(K.txs,[]);

@@ -1,7 +1,7 @@
 {
   "name": "iss-weighbridge",
   "productName": "ISS Weighbridge",
-  "version": "10.0.1",
+  "version": "10.1.0",
   "description": "ISS Weighbridge — weighbridge control, ticketing and reporting. Industrial Scale Solutions.",
   "author": {
     "name": "Industrial Scale Solutions",
