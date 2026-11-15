@@ -9,6 +9,12 @@
 !include "LogicLib.nsh"
 !include "nsDialogs.nsh"
 
+; electron-builder compiles this file twice: once for the installer and once,
+; with BUILD_UNINSTALLER defined, for the uninstaller. The activation page only
+; exists in the installer, so in the uninstaller pass its functions were
+; "not referenced" — a warning, and warnings stop the build.
+!ifndef BUILD_UNINSTALLER
+
 Var ISS_Dialog
 Var ISS_Field
 Var ISS_Code
@@ -41,3 +47,5 @@ Function ISS_PageLeave
     Abort
   ${EndIf}
 FunctionEnd
+
+!endif ; BUILD_UNINSTALLER
