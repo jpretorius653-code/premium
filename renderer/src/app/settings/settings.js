@@ -100,12 +100,16 @@ function renderSettings(){ try{enforcePlan();}catch(e){} setTimeout(refreshShare
             </select>
           </div>
         </div>
+        <div class="field" style="margin-top:8px"><label>Station — THIS PC only (two weighbridge PCs on one site)</label>
+          <input id="s-tkst" value="${esc(ticketStation())}" placeholder="blank on a single-PC site · A on one PC, B on the other" maxlength="3"
+                 style="text-transform:uppercase" onblur="setTicketStation(this.value)"/></div>
+        <div class="sr-sub" style="margin-top:4px">With a station set, this PC issues its own series (${esc((cfg.ticketPrefix!==undefined?cfg.ticketPrefix:'WB'))}A-001 here, ${esc((cfg.ticketPrefix!==undefined?cfg.ticketPrefix:'WB'))}B-001 on the other PC), so the two can never issue the same number — even when the shared folder is down. Each PC must have a <b>different</b> letter.</div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
           <div style="font-size:12px;color:var(--text3)">Next ticket:</div>
           <div style="font-family:monospace;font-weight:800;font-size:16px;color:var(--green)">${esc(fmtTicketNo(peekTicketSeq()))}</div>
           <button class="btn btn-ghost btn-sm" onclick="setNextTicketNo()">Set next number…</button>
         </div>
-        <div class="sr-sub" style="margin-top:6px">Numbering is sequential and never reused. Setting it lower than an existing ticket is blocked.</div>
+        <div class="sr-sub" style="margin-top:6px">Numbering is sequential and never reused. The next number can never be set at or below one already issued.</div>
       </div>
     </div>
     <div class="sg"><div class="sg-title">Custom Fields — extra info on tickets &amp; records</div>
@@ -461,6 +465,20 @@ function setTicketPrefix(v){
   saveCfg(); auditLog('config','settings','','Ticket prefix set to "'+cfg.ticketPrefix+'"');
   renderSettings();
 }
+/* The station letter belongs to this PC and is never synchronised. Changing
+   it starts (or resumes) that station's own series: the counter moves to the
+   highest number already issued under the new letter. */
+function setTicketStation(v){
+  const st=String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3);
+  if(st===ticketStation()) return;
+  const was=ticketStation();
+  cfg.ticketStation=st; saveCfg();
+  P(K.seq, ticketHighWater());
+  _ticketPushedSig=null;
+  auditLog('config','settings','','Ticket station changed from "'+was+'" to "'+st+'" — next ticket '+fmtTicketNo(peekTicketSeq()));
+  toast(st?('This PC now issues '+fmtTicketNo(peekTicketSeq())+' onwards'):'Station cleared — shared numbering','success',5000);
+  renderSettings();
+}
 function setNextTicketNo(){
   const cur=peekTicketSeq();
   openModal('Set Next Ticket Number',`
@@ -483,8 +501,11 @@ function confirmNextTicketNo(){
   const n=parseInt(String(el?.value||'').replace(/[^0-9]/g,''));
   if(!isFinite(n)||n<1){ toast('Enter a number of 1 or more','error'); el?.focus(); return; }
   // Never allow a number that would collide with an existing ticket
-  if(txs.some(t=>t.id===fmtTicketNo(n))){
-    toast('Ticket '+fmtTicketNo(n)+' already exists — pick a different number','error',6000); return;
+  // …and never one at or below a number already issued, finished or not: the
+  // tickets above it would be issued a second time as the counter climbed.
+  const hi=ticketHighWater();
+  if(n<=hi || _ticketIdsInUse().has(fmtTicketNo(n))){
+    toast('Tickets up to '+fmtTicketNo(hi)+' already exist — the next number must be '+fmtTicketNo(hi+1)+' or higher','error',7000); return;
   }
   P(K.seq,n-1);
   // Mark this as a deliberate reset so it beats the shared high-water mark on

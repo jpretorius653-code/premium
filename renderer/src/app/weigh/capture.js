@@ -88,7 +88,29 @@ function cap2(manual){
     const mw=parseFloat(document.getElementById('f-manual-w')?.value);
     if(!isFinite(mw)||mw<=0){ toast('Enter a weight first','error'); document.getElementById('f-manual-w')?.focus(); return; }
   }
-  show2ndPicker(manual);
+  // Ask the share what the other PC has finished BEFORE offering the list —
+  // otherwise a truck it weighed out seconds ago is still offered here.
+  // Capped at 1.5 s so a dead folder never holds a truck on the bridge.
+  let shown=false;
+  const go=()=>{ if(shown) return; shown=true;
+    if(!pending.length){ toast('No trucks waiting for 2nd weight','info'); if(currentTab==='weigh') refreshOnSite(); return; }
+    show2ndPicker(manual); };
+  if(cfg.syncFolder && window.issDesktop && typeof sharePullNow==='function'){
+    sharePullNow().then(go,go); setTimeout(go,1500);
+  } else go();
+}
+/* The ticket that already closed this visit, if there is one. */
+function txAlreadyOut(p){
+  if(!p||!p.rowId) return null;
+  return txs.find(t=>t&&t.rowId===p.rowId&&t.completedAt)||null;
+}
+function _refuseSecondOut(p,done){
+  pending=pending.filter(x=>x.rowId!==p.rowId);
+  P(K.pend,pending);
+  auditLog('weigh','blocked',p.vehicleReg,'2nd weigh-out refused — already completed as ticket '+done.id);
+  closeModal(); clearTx(); updateWBCount();
+  toast('⛔ '+p.vehicleReg+' was already weighed out — ticket '+done.id+'. Nothing saved.','error',9000);
+  if(currentTab==='weigh') renderWeigh();
 }
 function show2ndPicker(manual){
   const u=cfg.weightUnit||'kg';
@@ -124,6 +146,7 @@ function pick2nd(reg, manualW){
   const w = (manualW!=null && isFinite(manualW)) ? applyDivision(manualW, activeBridge) : applyDivision(bState[activeBridge].live, activeBridge);
   const pIdx=pending.findIndex(p=>p.vehicleReg===reg);   // any bridge
   if(pIdx<0){toast('Truck not found','error');return;}
+  { const done=txAlreadyOut(pending[pIdx]); if(done){ _refuseSecondOut(pending[pIdx],done); return; } }
   activeTx={...pending[pIdx]};
   activeTx.secondWeight=w;
   captureDecks(activeTx,'decks2');
@@ -211,6 +234,8 @@ function showNetModal(){
     </div>`);
 }
 function completeTx(printType){
+  // the modal can sit open while the other PC finishes the same truck
+  { const done=txAlreadyOut(activeTx); if(done){ _refuseSecondOut(activeTx,done); return; } }
   activeTx.vehicleReg =(document.getElementById('np-reg')?.value||'').trim().toUpperCase();
   activeTx.orderId    =(document.getElementById('np-ord')?.value||'').trim();
   activeTx.product    =(document.getElementById('np-prod')?.value||'').trim();

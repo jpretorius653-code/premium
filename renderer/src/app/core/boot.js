@@ -6,7 +6,7 @@
 // Format is deliberate: no spaces around '=', single quotes, one line —
 // the workflow greps for it.
 // ══════════════════════════════════════════════════════════
-const RENDERER_BUILD='10.0.0';
+const RENDERER_BUILD='10.0.1';
 window.RENDERER_BUILD=RENDERER_BUILD;
 // ══════════════════════════════════════════════════════════
 // DEBUG CONSOLE — permanent, toggleable diagnostic panel.

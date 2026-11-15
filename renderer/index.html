@@ -2977,7 +2977,7 @@ window.BRAND=BRAND;
 // Format is deliberate: no spaces around '=', single quotes, one line —
 // the workflow greps for it.
 // ══════════════════════════════════════════════════════════
-const RENDERER_BUILD='10.0.0';
+const RENDERER_BUILD='10.0.1';
 window.RENDERER_BUILD=RENDERER_BUILD;
 // ══════════════════════════════════════════════════════════
 // DEBUG CONSOLE — permanent, toggleable diagnostic panel.
@@ -3586,16 +3586,61 @@ function nextTicketSeq(){
   P(K.seq,n);
   return n;
 }
-function peekTicketSeq(){ return (parseInt(G(K.seq,0))||0)+1; }
-function fmtTicketNo(n){
+function peekTicketSeq(){ return Math.max(parseInt(G(K.seq,0))||0, ticketHighWater())+1; }
+/* STATION CODE — the fix for two weighbridge PCs on one site.
+   Two PCs counting from one shared counter WILL issue the same number sooner
+   or later: the counter travels between them through a file, and any moment
+   the folder is slow or unreachable both PCs hand out the next number. Give
+   each PC its own letter (Settings → Ticket numbering → Station) and each
+   issues from its own series — WBA-0001, WBB-0001 — so a clash is impossible
+   whether the PCs can see each other or not. Stored in this PC's config only;
+   it is never synchronised. Blank = the old single shared series. */
+function ticketStation(){
+  return String((cfg&&cfg.ticketStation)||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3);
+}
+function _ticketHead(){
   const pre=(cfg.ticketPrefix!==undefined?cfg.ticketPrefix:'WB');
+  const st=ticketStation();
+  return String(pre)+(st?st+'-':'');
+}
+function fmtTicketNo(n){
   const pad=Math.max(1,Math.min(8,parseInt(cfg.ticketPad)||3));
-  return String(pre)+String(n).padStart(pad,'0');
+  return _ticketHead()+String(n).padStart(pad,'0');
+}
+/* Every ticket number this PC knows about: finished, voided AND still on
+   site. The old check looked at finished tickets only, so a PC whose counter
+   had restarted handed out the numbers of voided and on-site tickets. */
+function _ticketIdsInUse(){
+  const s=new Set();
+  (txs||[]).forEach(t=>{ if(!t) return; if(t.id) s.add(String(t.id)); if(t._collisionFrom) s.add(String(t._collisionFrom)); });
+  (pending||[]).forEach(p=>{ if(p&&p.id) s.add(String(p.id)); });
+  return s;
+}
+/* Highest number already issued in this PC's series. The counter is never
+   allowed to sit below it: a counter that restarts (new PC, reinstall,
+   cleared storage) would otherwise walk up from 1 and re-issue old numbers. */
+function ticketHighWater(){
+  const head=_ticketHead();
+  let hi=0;
+  _ticketIdsInUse().forEach(id=>{
+    if(!id.startsWith(head)) return;
+    const m=/^(\d{1,12})/.exec(id.slice(head.length));
+    if(m){ const n=parseInt(m[1],10); if(n>hi) hi=n; }
+  });
+  return hi;
 }
 function txId(){
-  // Guard against duplicates if a ticket number was ever reused
-  let n=nextTicketSeq(), id=fmtTicketNo(n), guard=0;
-  while(txs.some(t=>t.id===id) && guard++<10000){ n=nextTicketSeq(); id=fmtTicketNo(n); }
+  const used=_ticketIdsInUse();
+  let n=parseInt(G(K.seq,0))||0;
+  const hi=ticketHighWater();
+  if(n<hi){
+    try{ Debug.log('Ticket counter was at '+n+' but '+fmtTicketNo(hi)+' already exists — continuing from '+hi); }catch(e){}
+    try{ auditLog('config','settings','','Ticket counter was behind ('+n+') — moved up to the highest issued number ('+hi+')'); }catch(e){}
+    n=hi;
+  }
+  let id, guard=0;
+  do{ n++; id=fmtTicketNo(n); }while(used.has(id) && guard++<100000);
+  P(K.seq,n);
   return id;
 }
 let _txSeq=0;
@@ -6270,7 +6315,29 @@ function cap2(manual){
     const mw=parseFloat(document.getElementById('f-manual-w')?.value);
     if(!isFinite(mw)||mw<=0){ toast('Enter a weight first','error'); document.getElementById('f-manual-w')?.focus(); return; }
   }
-  show2ndPicker(manual);
+  // Ask the share what the other PC has finished BEFORE offering the list —
+  // otherwise a truck it weighed out seconds ago is still offered here.
+  // Capped at 1.5 s so a dead folder never holds a truck on the bridge.
+  let shown=false;
+  const go=()=>{ if(shown) return; shown=true;
+    if(!pending.length){ toast('No trucks waiting for 2nd weight','info'); if(currentTab==='weigh') refreshOnSite(); return; }
+    show2ndPicker(manual); };
+  if(cfg.syncFolder && window.issDesktop && typeof sharePullNow==='function'){
+    sharePullNow().then(go,go); setTimeout(go,1500);
+  } else go();
+}
+/* The ticket that already closed this visit, if there is one. */
+function txAlreadyOut(p){
+  if(!p||!p.rowId) return null;
+  return txs.find(t=>t&&t.rowId===p.rowId&&t.completedAt)||null;
+}
+function _refuseSecondOut(p,done){
+  pending=pending.filter(x=>x.rowId!==p.rowId);
+  P(K.pend,pending);
+  auditLog('weigh','blocked',p.vehicleReg,'2nd weigh-out refused — already completed as ticket '+done.id);
+  closeModal(); clearTx(); updateWBCount();
+  toast('⛔ '+p.vehicleReg+' was already weighed out — ticket '+done.id+'. Nothing saved.','error',9000);
+  if(currentTab==='weigh') renderWeigh();
 }
 function show2ndPicker(manual){
   const u=cfg.weightUnit||'kg';
@@ -6306,6 +6373,7 @@ function pick2nd(reg, manualW){
   const w = (manualW!=null && isFinite(manualW)) ? applyDivision(manualW, activeBridge) : applyDivision(bState[activeBridge].live, activeBridge);
   const pIdx=pending.findIndex(p=>p.vehicleReg===reg);   // any bridge
   if(pIdx<0){toast('Truck not found','error');return;}
+  { const done=txAlreadyOut(pending[pIdx]); if(done){ _refuseSecondOut(pending[pIdx],done); return; } }
   activeTx={...pending[pIdx]};
   activeTx.secondWeight=w;
   captureDecks(activeTx,'decks2');
@@ -6393,6 +6461,8 @@ function showNetModal(){
     </div>`);
 }
 function completeTx(printType){
+  // the modal can sit open while the other PC finishes the same truck
+  { const done=txAlreadyOut(activeTx); if(done){ _refuseSecondOut(activeTx,done); return; } }
   activeTx.vehicleReg =(document.getElementById('np-reg')?.value||'').trim().toUpperCase();
   activeTx.orderId    =(document.getElementById('np-ord')?.value||'').trim();
   activeTx.product    =(document.getElementById('np-prod')?.value||'').trim();
@@ -10393,12 +10463,18 @@ function _txUnique(pairs){
   return {take, defer};
 }
 
+/* Tickets the cloud would not take because their number is held by another
+   ticket. Shown on the Cloud tab until they go up. */
+let _txRefused=[];
+try{ _txRefused=JSON.parse(localStorage.getItem('iss_tx_refused')||'[]')||[]; }catch(e){ _txRefused=[]; }
+function _txRefusedSave(){ try{ localStorage.setItem('iss_tx_refused',JSON.stringify(_txRefused.slice(0,200))); }catch(e){} }
+
 let _txColsOff=[];
 try{ _txColsOff=JSON.parse(localStorage.getItem('iss_tx_cols_off')||'[]')||[]; }catch(e){ _txColsOff=[]; }
 function _txColsSave(){ try{ localStorage.setItem('iss_tx_cols_off',JSON.stringify(_txColsOff)); }catch(e){} }
 function _txColsReset(){ _txColsOff=[]; _txColsSave(); }
 async function _txPost(rows){
-  if(!rows||!rows.length) return;
+  if(!rows||!rows.length) return [];
   for(let attempt=0; attempt<=TX_EXTRA_COLS.length; attempt++){
     const body=_txColsOff.length
       ? rows.map(r=>{ const o=Object.assign({},r); _txColsOff.forEach(c=>{ delete o[c]; }); return o; })
@@ -10407,7 +10483,7 @@ async function _txPost(rows){
       await _sbReq('transactions?on_conflict=row_id',{method:'POST',
         headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},
         body:JSON.stringify(body)});
-      return;
+      return [];
     }catch(e){
       const m=/Could not find the '([a-z0-9_]+)' column/i.exec(String((e&&e.message)||''));
       if(m && TX_EXTRA_COLS.indexOf(m[1])>=0 && _txColsOff.indexOf(m[1])<0){
@@ -10415,12 +10491,16 @@ async function _txPost(rows){
         try{ Debug.log('Cloud: transactions has no '+m[1]+' column — sending without it'); }catch(_e){}
         continue;
       }
-      // A ticket already on the cloud under a different row_id trips the
-      // (site,ticket) unique. That's not a failure - it's already there.
-      // Re-post one row at a time so new tickets still go up and the
-      // already-synced ones are skipped instead of killing the whole batch.
-      if(/23505|duplicate key/i.test(String((e&&e.message)||'')) && body.length>1){
-        let sent=0, skipped=0;
+      // (site, ticket) already belongs to ANOTHER row in the cloud. This used
+      // to be logged as "already on cloud" and the ticket marked as sent —
+      // but it is only "already there" if it is the same truck. When two PCs
+      // had issued one number to two trucks, the second truck's ticket was
+      // dropped here for good and nobody was told.
+      // Post one row at a time so the rest still go up, and hand back the
+      // rows the cloud refused. They are NOT marked as sent: they stay in
+      // the queue, and the Cloud tab names them.
+      if(/23505|duplicate key/i.test(String((e&&e.message)||''))){
+        const refused=[]; let sent=0;
         for(const r of body){
           try{
             await _sbReq('transactions?on_conflict=row_id',{method:'POST',
@@ -10428,12 +10508,12 @@ async function _txPost(rows){
               body:JSON.stringify([r])});
             sent++;
           }catch(e2){
-            if(/23505|duplicate key/i.test(String((e2&&e2.message)||''))) skipped++;
+            if(/23505|duplicate key/i.test(String((e2&&e2.message)||''))) refused.push(r.row_id);
             else throw e2;
           }
         }
-        try{ Debug.log('Cloud: re-send - '+sent+' posted, '+skipped+' already on cloud (skipped)'); }catch(_e){}
-        return;
+        try{ Debug.log('Cloud: '+sent+' posted, '+refused.length+' REFUSED — ticket number already used by another ticket'); }catch(_e){}
+        return refused;
       }
       throw e;
     }
@@ -10464,7 +10544,11 @@ async function syncPushTickets(){
 
   // Trucks still on site: first weight taken, no second. Re-sent every pass
   // (they are few, and the dashboard's on-site timer wants them current).
-  const openRows=(pending||[]).filter(p=>p&&p.id&&p.firstWeightTime&&!p.completedAt)
+  // Never one whose visit already has a finished ticket: a stale on-site
+  // entry shares that ticket's row id, and sending it as 'open' would pull
+  // the finished ticket back out of the client's reports.
+  const doneIds=new Set(txs.filter(t=>t&&t.rowId&&t.completedAt).map(t=>t.rowId));
+  const openRows=(pending||[]).filter(p=>p&&p.id&&p.firstWeightTime&&!p.completedAt&&!doneIds.has(p.rowId))
                               .map(p=>({t:p, row:txCloudRow(p,'open')}));
 
   let n=0;
@@ -10478,12 +10562,17 @@ async function syncPushTickets(){
   for(let i=0;i<doneDue.length;i+=100){
     const batch=doneDue.slice(i,i+100);
     const take=_txUnique(batch.map(t=>({t, row:txCloudRow(t,'complete')}))).take;
-    await _txPost(take.map(p=>p.row));
+    const refused=new Set(await _txPost(take.map(p=>p.row)));
     const at=nowISO();
-    // Only what actually went up is marked. A deferred ticket keeps its
-    // empty _txAt and is picked up on the next pass.
-    take.forEach(p=>{ p.t._txAt=at; });
-    n+=take.length;
+    // Only what actually went up is marked. A deferred or refused ticket
+    // keeps its empty _txAt and is picked up on the next pass.
+    take.forEach(p=>{
+      const tk=String(p.row.ticket==null?'':p.row.ticket)||'(no ticket)';
+      if(refused.has(p.row.row_id)){ if(_txRefused.indexOf(tk)<0) _txRefused.push(tk); return; }
+      p.t._txAt=at; n++;
+      const i=_txRefused.indexOf(tk); if(i>=0) _txRefused.splice(i,1);
+    });
+    _txRefusedSave();
   }
   if(doneDue.length) saveTxs();
   return n;
@@ -10671,6 +10760,10 @@ function syncPanelHTML(){
         Ticket ${esc(_txClash.slice(0,6).join(', '))}${_txClash.length>6?' and '+(_txClash.length-6)+' more':''}
         share a cloud row id with another ticket. They still sync, one pass apart, but two tickets
         cannot both own one cloud row — worth checking them in Records.</div>`:''}
+      ${_txRefused.length?`<div style="margin-top:8px;font-size:12px;color:#F87171;line-height:1.55">
+        <b>NOT in the cloud:</b> ticket ${esc(_txRefused.slice(0,8).join(', '))}${_txRefused.length>8?' and '+(_txRefused.length-8)+' more':''}.
+        The cloud already holds a different ticket under ${_txRefused.length>1?'those numbers':'that number'} — two PCs issued the same number.
+        ${_txRefused.length>1?'They stay':'It stays'} queued and will be retried; tell ISS so the clash can be resolved.</div>`:''}
       ${_txColsOff.length?`<div style="margin-top:8px;font-size:12px;color:#34D399;line-height:1.55">
         The cloud has no <b>${esc(_txColsOff.join(', '))}</b> column${_txColsOff.length>1?'s':''}, so
         ${_txColsOff.length>1?'those fields are':'that field is'} being left out of every ticket.
@@ -11048,12 +11141,16 @@ function renderSettings(){ try{enforcePlan();}catch(e){} setTimeout(refreshShare
             </select>
           </div>
         </div>
+        <div class="field" style="margin-top:8px"><label>Station — THIS PC only (two weighbridge PCs on one site)</label>
+          <input id="s-tkst" value="${esc(ticketStation())}" placeholder="blank on a single-PC site · A on one PC, B on the other" maxlength="3"
+                 style="text-transform:uppercase" onblur="setTicketStation(this.value)"/></div>
+        <div class="sr-sub" style="margin-top:4px">With a station set, this PC issues its own series (${esc((cfg.ticketPrefix!==undefined?cfg.ticketPrefix:'WB'))}A-001 here, ${esc((cfg.ticketPrefix!==undefined?cfg.ticketPrefix:'WB'))}B-001 on the other PC), so the two can never issue the same number — even when the shared folder is down. Each PC must have a <b>different</b> letter.</div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
           <div style="font-size:12px;color:var(--text3)">Next ticket:</div>
           <div style="font-family:monospace;font-weight:800;font-size:16px;color:var(--green)">${esc(fmtTicketNo(peekTicketSeq()))}</div>
           <button class="btn btn-ghost btn-sm" onclick="setNextTicketNo()">Set next number…</button>
         </div>
-        <div class="sr-sub" style="margin-top:6px">Numbering is sequential and never reused. Setting it lower than an existing ticket is blocked.</div>
+        <div class="sr-sub" style="margin-top:6px">Numbering is sequential and never reused. The next number can never be set at or below one already issued.</div>
       </div>
     </div>
     <div class="sg"><div class="sg-title">Custom Fields — extra info on tickets &amp; records</div>
@@ -11409,6 +11506,20 @@ function setTicketPrefix(v){
   saveCfg(); auditLog('config','settings','','Ticket prefix set to "'+cfg.ticketPrefix+'"');
   renderSettings();
 }
+/* The station letter belongs to this PC and is never synchronised. Changing
+   it starts (or resumes) that station's own series: the counter moves to the
+   highest number already issued under the new letter. */
+function setTicketStation(v){
+  const st=String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3);
+  if(st===ticketStation()) return;
+  const was=ticketStation();
+  cfg.ticketStation=st; saveCfg();
+  P(K.seq, ticketHighWater());
+  _ticketPushedSig=null;
+  auditLog('config','settings','','Ticket station changed from "'+was+'" to "'+st+'" — next ticket '+fmtTicketNo(peekTicketSeq()));
+  toast(st?('This PC now issues '+fmtTicketNo(peekTicketSeq())+' onwards'):'Station cleared — shared numbering','success',5000);
+  renderSettings();
+}
 function setNextTicketNo(){
   const cur=peekTicketSeq();
   openModal('Set Next Ticket Number',`
@@ -11431,8 +11542,11 @@ function confirmNextTicketNo(){
   const n=parseInt(String(el?.value||'').replace(/[^0-9]/g,''));
   if(!isFinite(n)||n<1){ toast('Enter a number of 1 or more','error'); el?.focus(); return; }
   // Never allow a number that would collide with an existing ticket
-  if(txs.some(t=>t.id===fmtTicketNo(n))){
-    toast('Ticket '+fmtTicketNo(n)+' already exists — pick a different number','error',6000); return;
+  // …and never one at or below a number already issued, finished or not: the
+  // tickets above it would be issued a second time as the counter climbed.
+  const hi=ticketHighWater();
+  if(n<=hi || _ticketIdsInUse().has(fmtTicketNo(n))){
+    toast('Tickets up to '+fmtTicketNo(hi)+' already exist — the next number must be '+fmtTicketNo(hi+1)+' or higher','error',7000); return;
   }
   P(K.seq,n-1);
   // Mark this as a deliberate reset so it beats the shared high-water mark on
@@ -11953,14 +12067,62 @@ let _shareOK=false, _shareBusy=false;
 const _pendKey=p=>String(p.vehicleReg||'')+'@'+String(p.bridge==null?0:p.bridge);
 const _uKey=u=>String(u.id||u.name||'');
 
+/* A write to the share can fail — the folder is on another PC, and that PC
+   can be off, rebooting or unplugged. The old code ignored the result, so a
+   "truck has left" tombstone that failed once was never written and the other
+   PC kept the truck on site for good; an operator then weighed it out a second
+   time. Every write now reports whether it landed, and a tombstone that did
+   not is queued (it survives a restart) and retried on every sync pass. */
+let _shareRetry=[];
+try{ _shareRetry=G('iss_share_retry',[])||[]; }catch(e){ _shareRetry=[]; }
+function _shareRetrySave(){ try{ P('iss_share_retry',_shareRetry.slice(-500)); }catch(e){} }
+async function _shareWrite(kind,id,obj){
+  try{ const r=await window.issDesktop.sharedPut(kind,id,obj); return !!(r&&r.ok); }catch(e){ return false; }
+}
 async function sharePut(kind,id,obj){
-  if(!window.issDesktop||!window.issDesktop.sharedPut||!cfg.syncFolder) return;
-  try{ await window.issDesktop.sharedPut(kind,id,obj); }catch(e){}
+  if(!window.issDesktop||!window.issDesktop.sharedPut||!cfg.syncFolder) return false;
+  return await _shareWrite(kind,id,obj);
 }
 // Explicit delete from a dashboard -> tombstone the other side will honour
-async function shareDel(kind,id){
-  if(!window.issDesktop||!window.issDesktop.sharedPut||!cfg.syncFolder) return;
-  try{ await window.issDesktop.sharedPut(kind,id,{id,_deleted:true,_at:nowISO()}); }catch(e){}
+async function shareDel(kind,id,when){
+  if(!window.issDesktop||!window.issDesktop.sharedPut||!cfg.syncFolder) return false;
+  const at=when||nowISO();
+  const ok=await _shareWrite(kind,id,{id,_deleted:true,_at:at});
+  if(!ok && !_shareRetry.some(r=>r.kind===kind&&r.id===id)){ _shareRetry.push({kind,id,at}); _shareRetrySave(); }
+  return ok;
+}
+async function shareFlushRetry(){
+  if(!_shareRetry.length) return;
+  const keep=[];
+  for(const r of _shareRetry){
+    // the truck is legitimately back on site under the same key: the old
+    // tombstone must not remove the new visit
+    if(r.kind==='pend' && pending.some(p=>_pendKey(p)===r.id && String(p.firstWeightTime||'')>String(r.at||''))) continue;
+    if(!(await _shareWrite(r.kind,r.id,{id:r.id,_deleted:true,_at:r.at}))) keep.push(r);
+  }
+  if(keep.length!==_shareRetry.length){ _shareRetry=keep; _shareRetrySave(); }
+}
+/* One pull, right now, without colliding with the background pass. Used just
+   before a weigh-out so this PC knows what the other one finished. */
+async function sharePullNow(){
+  if(!cfg.syncFolder||!window.issDesktop||_shareBusy) return 0;
+  _shareBusy=true;
+  let n=0;
+  try{ n=await sharePull(); }catch(e){}
+  _shareBusy=false;
+  return n;
+}
+/* A finished ticket is the proof the truck has left. Any on-site entry that
+   carries the same row id is stale, whatever happened to its tombstone. */
+function prunePendingDone(){
+  const done=new Map(txs.filter(t=>t&&t.rowId&&t.completedAt).map(t=>[t.rowId,t.completedAt]));
+  const gone=pending.filter(p=>p&&p.rowId&&done.has(p.rowId));
+  if(!gone.length) return 0;
+  pending=pending.filter(p=>gone.indexOf(p)<0);
+  // tell the share too, dated at the weigh-out so a later visit by the same
+  // truck is not caught by it
+  gone.forEach(p=>{ shareDel('pend',_pendKey(p),done.get(p.rowId)); });
+  return gone.length;
 }
 async function shareList(kind){
   if(!window.issDesktop||!window.issDesktop.sharedList||!cfg.syncFolder) return [];
@@ -11980,8 +12142,9 @@ async function _pushIfChanged(kind,id,obj){
   let body;
   try{ body=JSON.stringify(obj); }catch(e){ return; }
   if(_pushCache.get(key)===body) return;      // unchanged — do not touch the file
-  await sharePut(kind,id,obj);
-  _pushCache.set(key,body);
+  // only remember it as written if it WAS written — a failed write is retried
+  // on the next pass instead of being forgotten
+  if(await sharePut(kind,id,obj)) _pushCache.set(key,body);
 }
 async function sharePushAll(){
   if(!cfg.syncFolder||!window.issDesktop) return;
@@ -12014,7 +12177,18 @@ async function sharePushAll(){
     try{ shared=await window.issDesktop.sharedDoc('ticketcfg'); }catch(e){}
     const myReset=cfg._seqResetAt||'';
     const theirReset=(shared&&shared.resetAt)||'';
-    if(theirReset && (!myReset || new Date(theirReset)>new Date(myReset))){
+    if(ticketStation()){
+      // This PC has its own series. Its counter is private: publish the
+      // prefix and padding only, and never take a number from the share.
+      const tk={prefix:(cfg.ticketPrefix!==undefined?cfg.ticketPrefix:'WB'),
+                pad:Math.max(1,Math.min(8,parseInt(cfg.ticketPad)||3)),
+                seq:(shared&&parseInt(shared.seq))||0, resetAt:theirReset, _at:(cfg._ticketAt||nowISO())};
+      const sig=JSON.stringify([tk.prefix,tk.pad,'station']);
+      if(sig!==_ticketPushedSig && (!shared || shared.prefix!==tk.prefix || shared.pad!==tk.pad)){
+        await window.issDesktop.sharedPutDoc('ticketcfg',tk);
+      }
+      _ticketPushedSig=sig;
+    } else if(theirReset && (!myReset || new Date(theirReset)>new Date(myReset))){
       // The share has a newer reset than us — take it, don't push over it.
       const theirs=parseInt(shared.seq)||0;
       if(theirs!==(parseInt(G(K.seq,0))||0)) P(K.seq,theirs);
@@ -12063,8 +12237,14 @@ async function sharePull(){
       // A ticket corrected or voided on the other PC carries a higher edit
       // version. It is the SAME ticket — take it in place rather than letting
       // the clash rule re-number it into a second copy.
+      // It must BE the same ticket, though. Two PCs that issued one number to
+      // two different trucks also arrive here, and taking the other PC's copy
+      // "in place" deleted this PC's ticket. Same row id, or failing that the
+      // same weigh-in, is what makes it the same ticket.
       const held=have.get(id);
-      if(held && (Number(t._ev)||0) > (Number(held._ev)||0)){
+      const sameRec = held && ((held.rowId && t.rowId) ? held.rowId===t.rowId
+                               : String(held.firstWeightTime||'')===String(t.firstWeightTime||''));
+      if(held && sameRec && (Number(t._ev)||0) > (Number(held._ev)||0)){
         Object.keys(held).forEach(k=>{ if(!(k in t)) delete held[k]; });
         Object.assign(held,t); changed++; return;
       }
@@ -12096,15 +12276,35 @@ async function sharePull(){
   // ── trucks on site: union, tombstones remove ──
   const rPd=await shareList('pend');
   if(rPd.length){
-    const have=new Set(pending.map(_pendKey));
-    const dead=new Set(rPd.filter(x=>x._deleted).map(x=>String(x.id)));
+    const have=new Map(pending.map(p=>[_pendKey(p),p]));
+    // a tombstone only removes a visit that started before it was written —
+    // the same truck coming back in must not be wiped by yesterday's tombstone
+    const dead=new Map(rPd.filter(x=>x._deleted).map(x=>[String(x.id),String(x._at||'')]));
+    const doneIds=new Set(txs.filter(t=>t&&t.rowId&&t.completedAt).map(t=>t.rowId));
     let c=0;
-    rPd.forEach(x=>{ if(!x._deleted && x.vehicleReg && !have.has(_pendKey(x))){ pending.push(x); c++; } });
+    rPd.forEach(x=>{
+      if(x._deleted || !x.vehicleReg) return;
+      if(x.rowId && doneIds.has(x.rowId)) return;          // already weighed out — stale file
+      const k=_pendKey(x), mine=have.get(k);
+      if(!mine){ pending.push(x); have.set(k,x); c++; return; }
+      // same truck, a different visit: the later weigh-in is the live one
+      if(mine.rowId && x.rowId && mine.rowId!==x.rowId
+         && String(x.firstWeightTime||'')>String(mine.firstWeightTime||'')){
+        pending[pending.indexOf(mine)]=x; have.set(k,x); c++;
+      }
+    });
     const b=pending.length;
-    pending=pending.filter(x=>!dead.has(_pendKey(x)));
+    pending=pending.filter(x=>{
+      const k=_pendKey(x);
+      if(!dead.has(k)) return true;
+      const at=dead.get(k);
+      return !!(at && String(x.firstWeightTime||'')>at);   // weighed in after the tombstone: keep
+    });
     c+=b-pending.length;
     if(c){ savePend(); changed+=c; _brk.pend=c; }
   }
+  // whatever the tombstones say, a finished ticket ends the visit
+  { const n=prunePendingDone(); if(n){ P(K.pend,pending); changed+=n; _brk.pend=(_brk.pend||0)+n; } }
 
   // ── allocations / orders: newest wins, tombstones remove ──
   const rOr=await shareList('orders');
@@ -12195,8 +12395,12 @@ async function sharePull(){
       const mine=parseInt(G(K.seq,0))||0;
       const theirReset=tk.resetAt||'';
       const myReset=cfg._seqResetAt||'';
-      if(theirReset && (!myReset || new Date(theirReset)>new Date(myReset))){
-        if(theirs!==mine){ P(K.seq,theirs); changed++; _brk.ticket=1; }
+      if(ticketStation()){
+        // own series — the shared counter belongs to PCs without a station
+      } else if(theirReset && (!myReset || new Date(theirReset)>new Date(myReset))){
+        // a reset can never take the counter below a number already issued
+        const floor=Math.max(theirs, ticketHighWater());
+        if(floor!==mine){ P(K.seq,floor); changed++; _brk.ticket=1; }
         cfg._seqResetAt=theirReset; saveCfg();
       } else if(theirs>mine){
         P(K.seq,theirs); changed++; _brk.ticket=(theirs-mine);
@@ -12224,8 +12428,9 @@ function _sameTx(a,b){
 // Next ticket number not already used in the given id-map (keeps prefix/padding).
 // Also advances the shared counter so future numbers stay ahead.
 function _nextFreeTicket(haveMap){
-  let n=parseInt(G(K.seq,0))||0, id, guard=0;
-  do{ n++; id=fmtTicketNo(n); }while(haveMap.has(String(id)) && guard++<100000);
+  const used=_ticketIdsInUse();
+  let n=Math.max(parseInt(G(K.seq,0))||0, ticketHighWater()), id, guard=0;
+  do{ n++; id=fmtTicketNo(n); }while((haveMap.has(String(id))||used.has(String(id))) && guard++<100000);
   P(K.seq,n); cfg._ticketAt=nowISO();
   return id;
 }
@@ -12269,6 +12474,7 @@ async function syncPoll(){
       const st=await window.issDesktop.sharedStatus();
       _shareOK=!!(st&&st.ok);
       if(_shareOK){
+        await shareFlushRetry();                 // tombstones that failed earlier
         const n=await sharePull();
         await sharePushAll();
         if(n){

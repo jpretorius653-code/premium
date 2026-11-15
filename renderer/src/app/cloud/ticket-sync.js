@@ -158,12 +158,18 @@ function _txUnique(pairs){
   return {take, defer};
 }
 
+/* Tickets the cloud would not take because their number is held by another
+   ticket. Shown on the Cloud tab until they go up. */
+let _txRefused=[];
+try{ _txRefused=JSON.parse(localStorage.getItem('iss_tx_refused')||'[]')||[]; }catch(e){ _txRefused=[]; }
+function _txRefusedSave(){ try{ localStorage.setItem('iss_tx_refused',JSON.stringify(_txRefused.slice(0,200))); }catch(e){} }
+
 let _txColsOff=[];
 try{ _txColsOff=JSON.parse(localStorage.getItem('iss_tx_cols_off')||'[]')||[]; }catch(e){ _txColsOff=[]; }
 function _txColsSave(){ try{ localStorage.setItem('iss_tx_cols_off',JSON.stringify(_txColsOff)); }catch(e){} }
 function _txColsReset(){ _txColsOff=[]; _txColsSave(); }
 async function _txPost(rows){
-  if(!rows||!rows.length) return;
+  if(!rows||!rows.length) return [];
   for(let attempt=0; attempt<=TX_EXTRA_COLS.length; attempt++){
     const body=_txColsOff.length
       ? rows.map(r=>{ const o=Object.assign({},r); _txColsOff.forEach(c=>{ delete o[c]; }); return o; })
@@ -172,7 +178,7 @@ async function _txPost(rows){
       await _sbReq('transactions?on_conflict=row_id',{method:'POST',
         headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},
         body:JSON.stringify(body)});
-      return;
+      return [];
     }catch(e){
       const m=/Could not find the '([a-z0-9_]+)' column/i.exec(String((e&&e.message)||''));
       if(m && TX_EXTRA_COLS.indexOf(m[1])>=0 && _txColsOff.indexOf(m[1])<0){
@@ -180,12 +186,16 @@ async function _txPost(rows){
         try{ Debug.log('Cloud: transactions has no '+m[1]+' column — sending without it'); }catch(_e){}
         continue;
       }
-      // A ticket already on the cloud under a different row_id trips the
-      // (site,ticket) unique. That's not a failure - it's already there.
-      // Re-post one row at a time so new tickets still go up and the
-      // already-synced ones are skipped instead of killing the whole batch.
-      if(/23505|duplicate key/i.test(String((e&&e.message)||'')) && body.length>1){
-        let sent=0, skipped=0;
+      // (site, ticket) already belongs to ANOTHER row in the cloud. This used
+      // to be logged as "already on cloud" and the ticket marked as sent —
+      // but it is only "already there" if it is the same truck. When two PCs
+      // had issued one number to two trucks, the second truck's ticket was
+      // dropped here for good and nobody was told.
+      // Post one row at a time so the rest still go up, and hand back the
+      // rows the cloud refused. They are NOT marked as sent: they stay in
+      // the queue, and the Cloud tab names them.
+      if(/23505|duplicate key/i.test(String((e&&e.message)||''))){
+        const refused=[]; let sent=0;
         for(const r of body){
           try{
             await _sbReq('transactions?on_conflict=row_id',{method:'POST',
@@ -193,12 +203,12 @@ async function _txPost(rows){
               body:JSON.stringify([r])});
             sent++;
           }catch(e2){
-            if(/23505|duplicate key/i.test(String((e2&&e2.message)||''))) skipped++;
+            if(/23505|duplicate key/i.test(String((e2&&e2.message)||''))) refused.push(r.row_id);
             else throw e2;
           }
         }
-        try{ Debug.log('Cloud: re-send - '+sent+' posted, '+skipped+' already on cloud (skipped)'); }catch(_e){}
-        return;
+        try{ Debug.log('Cloud: '+sent+' posted, '+refused.length+' REFUSED — ticket number already used by another ticket'); }catch(_e){}
+        return refused;
       }
       throw e;
     }
@@ -229,7 +239,11 @@ async function syncPushTickets(){
 
   // Trucks still on site: first weight taken, no second. Re-sent every pass
   // (they are few, and the dashboard's on-site timer wants them current).
-  const openRows=(pending||[]).filter(p=>p&&p.id&&p.firstWeightTime&&!p.completedAt)
+  // Never one whose visit already has a finished ticket: a stale on-site
+  // entry shares that ticket's row id, and sending it as 'open' would pull
+  // the finished ticket back out of the client's reports.
+  const doneIds=new Set(txs.filter(t=>t&&t.rowId&&t.completedAt).map(t=>t.rowId));
+  const openRows=(pending||[]).filter(p=>p&&p.id&&p.firstWeightTime&&!p.completedAt&&!doneIds.has(p.rowId))
                               .map(p=>({t:p, row:txCloudRow(p,'open')}));
 
   let n=0;
@@ -243,12 +257,17 @@ async function syncPushTickets(){
   for(let i=0;i<doneDue.length;i+=100){
     const batch=doneDue.slice(i,i+100);
     const take=_txUnique(batch.map(t=>({t, row:txCloudRow(t,'complete')}))).take;
-    await _txPost(take.map(p=>p.row));
+    const refused=new Set(await _txPost(take.map(p=>p.row)));
     const at=nowISO();
-    // Only what actually went up is marked. A deferred ticket keeps its
-    // empty _txAt and is picked up on the next pass.
-    take.forEach(p=>{ p.t._txAt=at; });
-    n+=take.length;
+    // Only what actually went up is marked. A deferred or refused ticket
+    // keeps its empty _txAt and is picked up on the next pass.
+    take.forEach(p=>{
+      const tk=String(p.row.ticket==null?'':p.row.ticket)||'(no ticket)';
+      if(refused.has(p.row.row_id)){ if(_txRefused.indexOf(tk)<0) _txRefused.push(tk); return; }
+      p.t._txAt=at; n++;
+      const i=_txRefused.indexOf(tk); if(i>=0) _txRefused.splice(i,1);
+    });
+    _txRefusedSave();
   }
   if(doneDue.length) saveTxs();
   return n;
