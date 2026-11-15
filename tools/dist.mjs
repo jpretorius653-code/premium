@@ -25,8 +25,13 @@ const dir = path.join(ROOT, 'renderer', 'brands', brand);
 if (!fs.existsSync(path.join(dir, 'brand.json'))) { console.error(`✗ no brand pack "${brand}"`); process.exit(1); }
 const B = JSON.parse(fs.readFileSync(path.join(dir, 'brand.json'), 'utf8'));
 
+// On Windows npx is a .cmd file, so the call has to go through the shell — and
+// the shell splits on spaces. "ISS Weighbridge" arrived at electron-builder as
+// two arguments ("Unknown arguments: Weighbridge"). Quote anything with a space.
+const WIN = process.platform === 'win32';
+const q = (x) => (WIN && /[\s&()^|<>]/.test(x) ? `"${x}"` : x);
 const run = (cmd, a) => {
-  const r = spawnSync(cmd, a, { cwd: ROOT, stdio: 'inherit', shell: process.platform === 'win32' });
+  const r = spawnSync(q(cmd), a.map(q), { cwd: ROOT, stdio: 'inherit', shell: WIN });
   if (r.status !== 0) process.exit(r.status || 1);
 };
 
