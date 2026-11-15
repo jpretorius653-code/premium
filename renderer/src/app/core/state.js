@@ -67,6 +67,8 @@ let cfg=Object.assign({},DEF_CFG,G(K.cfg,{}));
 if(!cfg.bridges)cfg.bridges=DEF_CFG.bridges;
 /* Theme. '' = flagship dark, 'day' = Daylight (styles/daylight.css). Belongs to
    this PC — a cabin in full sun and a back office need not agree. */
+// never chosen on this PC → take the look this installer was built with
+if(cfg.theme===undefined || cfg.theme===null) cfg.theme=(typeof BRAND!=='undefined'&&BRAND.defaultTheme)||'';
 function applyTheme(){
   try{ if(cfg.theme==='day') document.documentElement.setAttribute('data-theme','day');
        else document.documentElement.removeAttribute('data-theme'); }catch(e){}
