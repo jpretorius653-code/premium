@@ -13,14 +13,62 @@ let _shareOK=false, _shareBusy=false;
 const _pendKey=p=>String(p.vehicleReg||'')+'@'+String(p.bridge==null?0:p.bridge);
 const _uKey=u=>String(u.id||u.name||'');
 
+/* A write to the share can fail — the folder is on another PC, and that PC
+   can be off, rebooting or unplugged. The old code ignored the result, so a
+   "truck has left" tombstone that failed once was never written and the other
+   PC kept the truck on site for good; an operator then weighed it out a second
+   time. Every write now reports whether it landed, and a tombstone that did
+   not is queued (it survives a restart) and retried on every sync pass. */
+let _shareRetry=[];
+try{ _shareRetry=G('iss_share_retry',[])||[]; }catch(e){ _shareRetry=[]; }
+function _shareRetrySave(){ try{ P('iss_share_retry',_shareRetry.slice(-500)); }catch(e){} }
+async function _shareWrite(kind,id,obj){
+  try{ const r=await window.issDesktop.sharedPut(kind,id,obj); return !!(r&&r.ok); }catch(e){ return false; }
+}
 async function sharePut(kind,id,obj){
-  if(!window.issDesktop||!window.issDesktop.sharedPut||!cfg.syncFolder) return;
-  try{ await window.issDesktop.sharedPut(kind,id,obj); }catch(e){}
+  if(!window.issDesktop||!window.issDesktop.sharedPut||!cfg.syncFolder) return false;
+  return await _shareWrite(kind,id,obj);
 }
 // Explicit delete from a dashboard -> tombstone the other side will honour
-async function shareDel(kind,id){
-  if(!window.issDesktop||!window.issDesktop.sharedPut||!cfg.syncFolder) return;
-  try{ await window.issDesktop.sharedPut(kind,id,{id,_deleted:true,_at:nowISO()}); }catch(e){}
+async function shareDel(kind,id,when){
+  if(!window.issDesktop||!window.issDesktop.sharedPut||!cfg.syncFolder) return false;
+  const at=when||nowISO();
+  const ok=await _shareWrite(kind,id,{id,_deleted:true,_at:at});
+  if(!ok && !_shareRetry.some(r=>r.kind===kind&&r.id===id)){ _shareRetry.push({kind,id,at}); _shareRetrySave(); }
+  return ok;
+}
+async function shareFlushRetry(){
+  if(!_shareRetry.length) return;
+  const keep=[];
+  for(const r of _shareRetry){
+    // the truck is legitimately back on site under the same key: the old
+    // tombstone must not remove the new visit
+    if(r.kind==='pend' && pending.some(p=>_pendKey(p)===r.id && String(p.firstWeightTime||'')>String(r.at||''))) continue;
+    if(!(await _shareWrite(r.kind,r.id,{id:r.id,_deleted:true,_at:r.at}))) keep.push(r);
+  }
+  if(keep.length!==_shareRetry.length){ _shareRetry=keep; _shareRetrySave(); }
+}
+/* One pull, right now, without colliding with the background pass. Used just
+   before a weigh-out so this PC knows what the other one finished. */
+async function sharePullNow(){
+  if(!cfg.syncFolder||!window.issDesktop||_shareBusy) return 0;
+  _shareBusy=true;
+  let n=0;
+  try{ n=await sharePull(); }catch(e){}
+  _shareBusy=false;
+  return n;
+}
+/* A finished ticket is the proof the truck has left. Any on-site entry that
+   carries the same row id is stale, whatever happened to its tombstone. */
+function prunePendingDone(){
+  const done=new Map(txs.filter(t=>t&&t.rowId&&t.completedAt).map(t=>[t.rowId,t.completedAt]));
+  const gone=pending.filter(p=>p&&p.rowId&&done.has(p.rowId));
+  if(!gone.length) return 0;
+  pending=pending.filter(p=>gone.indexOf(p)<0);
+  // tell the share too, dated at the weigh-out so a later visit by the same
+  // truck is not caught by it
+  gone.forEach(p=>{ shareDel('pend',_pendKey(p),done.get(p.rowId)); });
+  return gone.length;
 }
 async function shareList(kind){
   if(!window.issDesktop||!window.issDesktop.sharedList||!cfg.syncFolder) return [];
@@ -40,8 +88,9 @@ async function _pushIfChanged(kind,id,obj){
   let body;
   try{ body=JSON.stringify(obj); }catch(e){ return; }
   if(_pushCache.get(key)===body) return;      // unchanged — do not touch the file
-  await sharePut(kind,id,obj);
-  _pushCache.set(key,body);
+  // only remember it as written if it WAS written — a failed write is retried
+  // on the next pass instead of being forgotten
+  if(await sharePut(kind,id,obj)) _pushCache.set(key,body);
 }
 async function sharePushAll(){
   if(!cfg.syncFolder||!window.issDesktop) return;
@@ -74,7 +123,18 @@ async function sharePushAll(){
     try{ shared=await window.issDesktop.sharedDoc('ticketcfg'); }catch(e){}
     const myReset=cfg._seqResetAt||'';
     const theirReset=(shared&&shared.resetAt)||'';
-    if(theirReset && (!myReset || new Date(theirReset)>new Date(myReset))){
+    if(ticketStation()){
+      // This PC has its own series. Its counter is private: publish the
+      // prefix and padding only, and never take a number from the share.
+      const tk={prefix:(cfg.ticketPrefix!==undefined?cfg.ticketPrefix:'WB'),
+                pad:Math.max(1,Math.min(8,parseInt(cfg.ticketPad)||3)),
+                seq:(shared&&parseInt(shared.seq))||0, resetAt:theirReset, _at:(cfg._ticketAt||nowISO())};
+      const sig=JSON.stringify([tk.prefix,tk.pad,'station']);
+      if(sig!==_ticketPushedSig && (!shared || shared.prefix!==tk.prefix || shared.pad!==tk.pad)){
+        await window.issDesktop.sharedPutDoc('ticketcfg',tk);
+      }
+      _ticketPushedSig=sig;
+    } else if(theirReset && (!myReset || new Date(theirReset)>new Date(myReset))){
       // The share has a newer reset than us — take it, don't push over it.
       const theirs=parseInt(shared.seq)||0;
       if(theirs!==(parseInt(G(K.seq,0))||0)) P(K.seq,theirs);
@@ -123,8 +183,14 @@ async function sharePull(){
       // A ticket corrected or voided on the other PC carries a higher edit
       // version. It is the SAME ticket — take it in place rather than letting
       // the clash rule re-number it into a second copy.
+      // It must BE the same ticket, though. Two PCs that issued one number to
+      // two different trucks also arrive here, and taking the other PC's copy
+      // "in place" deleted this PC's ticket. Same row id, or failing that the
+      // same weigh-in, is what makes it the same ticket.
       const held=have.get(id);
-      if(held && (Number(t._ev)||0) > (Number(held._ev)||0)){
+      const sameRec = held && ((held.rowId && t.rowId) ? held.rowId===t.rowId
+                               : String(held.firstWeightTime||'')===String(t.firstWeightTime||''));
+      if(held && sameRec && (Number(t._ev)||0) > (Number(held._ev)||0)){
         Object.keys(held).forEach(k=>{ if(!(k in t)) delete held[k]; });
         Object.assign(held,t); changed++; return;
       }
@@ -156,15 +222,35 @@ async function sharePull(){
   // ── trucks on site: union, tombstones remove ──
   const rPd=await shareList('pend');
   if(rPd.length){
-    const have=new Set(pending.map(_pendKey));
-    const dead=new Set(rPd.filter(x=>x._deleted).map(x=>String(x.id)));
+    const have=new Map(pending.map(p=>[_pendKey(p),p]));
+    // a tombstone only removes a visit that started before it was written —
+    // the same truck coming back in must not be wiped by yesterday's tombstone
+    const dead=new Map(rPd.filter(x=>x._deleted).map(x=>[String(x.id),String(x._at||'')]));
+    const doneIds=new Set(txs.filter(t=>t&&t.rowId&&t.completedAt).map(t=>t.rowId));
     let c=0;
-    rPd.forEach(x=>{ if(!x._deleted && x.vehicleReg && !have.has(_pendKey(x))){ pending.push(x); c++; } });
+    rPd.forEach(x=>{
+      if(x._deleted || !x.vehicleReg) return;
+      if(x.rowId && doneIds.has(x.rowId)) return;          // already weighed out — stale file
+      const k=_pendKey(x), mine=have.get(k);
+      if(!mine){ pending.push(x); have.set(k,x); c++; return; }
+      // same truck, a different visit: the later weigh-in is the live one
+      if(mine.rowId && x.rowId && mine.rowId!==x.rowId
+         && String(x.firstWeightTime||'')>String(mine.firstWeightTime||'')){
+        pending[pending.indexOf(mine)]=x; have.set(k,x); c++;
+      }
+    });
     const b=pending.length;
-    pending=pending.filter(x=>!dead.has(_pendKey(x)));
+    pending=pending.filter(x=>{
+      const k=_pendKey(x);
+      if(!dead.has(k)) return true;
+      const at=dead.get(k);
+      return !!(at && String(x.firstWeightTime||'')>at);   // weighed in after the tombstone: keep
+    });
     c+=b-pending.length;
     if(c){ savePend(); changed+=c; _brk.pend=c; }
   }
+  // whatever the tombstones say, a finished ticket ends the visit
+  { const n=prunePendingDone(); if(n){ P(K.pend,pending); changed+=n; _brk.pend=(_brk.pend||0)+n; } }
 
   // ── allocations / orders: newest wins, tombstones remove ──
   const rOr=await shareList('orders');
@@ -255,8 +341,12 @@ async function sharePull(){
       const mine=parseInt(G(K.seq,0))||0;
       const theirReset=tk.resetAt||'';
       const myReset=cfg._seqResetAt||'';
-      if(theirReset && (!myReset || new Date(theirReset)>new Date(myReset))){
-        if(theirs!==mine){ P(K.seq,theirs); changed++; _brk.ticket=1; }
+      if(ticketStation()){
+        // own series — the shared counter belongs to PCs without a station
+      } else if(theirReset && (!myReset || new Date(theirReset)>new Date(myReset))){
+        // a reset can never take the counter below a number already issued
+        const floor=Math.max(theirs, ticketHighWater());
+        if(floor!==mine){ P(K.seq,floor); changed++; _brk.ticket=1; }
         cfg._seqResetAt=theirReset; saveCfg();
       } else if(theirs>mine){
         P(K.seq,theirs); changed++; _brk.ticket=(theirs-mine);
@@ -284,8 +374,9 @@ function _sameTx(a,b){
 // Next ticket number not already used in the given id-map (keeps prefix/padding).
 // Also advances the shared counter so future numbers stay ahead.
 function _nextFreeTicket(haveMap){
-  let n=parseInt(G(K.seq,0))||0, id, guard=0;
-  do{ n++; id=fmtTicketNo(n); }while(haveMap.has(String(id)) && guard++<100000);
+  const used=_ticketIdsInUse();
+  let n=Math.max(parseInt(G(K.seq,0))||0, ticketHighWater()), id, guard=0;
+  do{ n++; id=fmtTicketNo(n); }while((haveMap.has(String(id))||used.has(String(id))) && guard++<100000);
   P(K.seq,n); cfg._ticketAt=nowISO();
   return id;
 }
@@ -329,6 +420,7 @@ async function syncPoll(){
       const st=await window.issDesktop.sharedStatus();
       _shareOK=!!(st&&st.ok);
       if(_shareOK){
+        await shareFlushRetry();                 // tombstones that failed earlier
         const n=await sharePull();
         await sharePushAll();
         if(n){

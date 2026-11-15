@@ -52,16 +52,61 @@ function nextTicketSeq(){
   P(K.seq,n);
   return n;
 }
-function peekTicketSeq(){ return (parseInt(G(K.seq,0))||0)+1; }
-function fmtTicketNo(n){
+function peekTicketSeq(){ return Math.max(parseInt(G(K.seq,0))||0, ticketHighWater())+1; }
+/* STATION CODE — the fix for two weighbridge PCs on one site.
+   Two PCs counting from one shared counter WILL issue the same number sooner
+   or later: the counter travels between them through a file, and any moment
+   the folder is slow or unreachable both PCs hand out the next number. Give
+   each PC its own letter (Settings → Ticket numbering → Station) and each
+   issues from its own series — WBA-0001, WBB-0001 — so a clash is impossible
+   whether the PCs can see each other or not. Stored in this PC's config only;
+   it is never synchronised. Blank = the old single shared series. */
+function ticketStation(){
+  return String((cfg&&cfg.ticketStation)||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3);
+}
+function _ticketHead(){
   const pre=(cfg.ticketPrefix!==undefined?cfg.ticketPrefix:'WB');
+  const st=ticketStation();
+  return String(pre)+(st?st+'-':'');
+}
+function fmtTicketNo(n){
   const pad=Math.max(1,Math.min(8,parseInt(cfg.ticketPad)||3));
-  return String(pre)+String(n).padStart(pad,'0');
+  return _ticketHead()+String(n).padStart(pad,'0');
+}
+/* Every ticket number this PC knows about: finished, voided AND still on
+   site. The old check looked at finished tickets only, so a PC whose counter
+   had restarted handed out the numbers of voided and on-site tickets. */
+function _ticketIdsInUse(){
+  const s=new Set();
+  (txs||[]).forEach(t=>{ if(!t) return; if(t.id) s.add(String(t.id)); if(t._collisionFrom) s.add(String(t._collisionFrom)); });
+  (pending||[]).forEach(p=>{ if(p&&p.id) s.add(String(p.id)); });
+  return s;
+}
+/* Highest number already issued in this PC's series. The counter is never
+   allowed to sit below it: a counter that restarts (new PC, reinstall,
+   cleared storage) would otherwise walk up from 1 and re-issue old numbers. */
+function ticketHighWater(){
+  const head=_ticketHead();
+  let hi=0;
+  _ticketIdsInUse().forEach(id=>{
+    if(!id.startsWith(head)) return;
+    const m=/^(\d{1,12})/.exec(id.slice(head.length));
+    if(m){ const n=parseInt(m[1],10); if(n>hi) hi=n; }
+  });
+  return hi;
 }
 function txId(){
-  // Guard against duplicates if a ticket number was ever reused
-  let n=nextTicketSeq(), id=fmtTicketNo(n), guard=0;
-  while(txs.some(t=>t.id===id) && guard++<10000){ n=nextTicketSeq(); id=fmtTicketNo(n); }
+  const used=_ticketIdsInUse();
+  let n=parseInt(G(K.seq,0))||0;
+  const hi=ticketHighWater();
+  if(n<hi){
+    try{ Debug.log('Ticket counter was at '+n+' but '+fmtTicketNo(hi)+' already exists — continuing from '+hi); }catch(e){}
+    try{ auditLog('config','settings','','Ticket counter was behind ('+n+') — moved up to the highest issued number ('+hi+')'); }catch(e){}
+    n=hi;
+  }
+  let id, guard=0;
+  do{ n++; id=fmtTicketNo(n); }while(used.has(id) && guard++<100000);
+  P(K.seq,n);
   return id;
 }
 let _txSeq=0;

@@ -52,6 +52,10 @@ function syncPanelHTML(){
         Ticket ${esc(_txClash.slice(0,6).join(', '))}${_txClash.length>6?' and '+(_txClash.length-6)+' more':''}
         share a cloud row id with another ticket. They still sync, one pass apart, but two tickets
         cannot both own one cloud row — worth checking them in Records.</div>`:''}
+      ${_txRefused.length?`<div style="margin-top:8px;font-size:12px;color:#F87171;line-height:1.55">
+        <b>NOT in the cloud:</b> ticket ${esc(_txRefused.slice(0,8).join(', '))}${_txRefused.length>8?' and '+(_txRefused.length-8)+' more':''}.
+        The cloud already holds a different ticket under ${_txRefused.length>1?'those numbers':'that number'} — two PCs issued the same number.
+        ${_txRefused.length>1?'They stay':'It stays'} queued and will be retried; tell ISS so the clash can be resolved.</div>`:''}
       ${_txColsOff.length?`<div style="margin-top:8px;font-size:12px;color:#34D399;line-height:1.55">
         The cloud has no <b>${esc(_txColsOff.join(', '))}</b> column${_txColsOff.length>1?'s':''}, so
         ${_txColsOff.length>1?'those fields are':'that field is'} being left out of every ticket.

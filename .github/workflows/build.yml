@@ -8,6 +8,11 @@ on:
         type: choice
         options: [iss, promnatic]
         default: iss
+      theme:
+        description: Default look (either can be switched in Settings)
+        type: choice
+        options: [flagship, daylight]
+        default: flagship
   push:
     tags: ['v*']
 
@@ -16,6 +21,7 @@ jobs:
     runs-on: windows-latest
     env:
       BRAND: ${{ inputs.brand || 'iss' }}
+      THEME: ${{ inputs.theme || 'flagship' }}
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - uses: actions/checkout@v4
@@ -25,10 +31,10 @@ jobs:
       - name: Install
         run: npm install --no-audit --no-fund
       - name: Build installer
-        run: node tools/dist.mjs --brand ${{ env.BRAND }}
+        run: node tools/dist.mjs --brand ${{ env.BRAND }} --theme ${{ env.THEME }}
       - uses: actions/upload-artifact@v4
         with:
-          name: installer-${{ env.BRAND }}
+          name: installer-${{ env.BRAND }}-${{ env.THEME }}
           path: dist/*.exe
           if-no-files-found: error
       - name: Attach to release
